@@ -69,9 +69,9 @@ async def send_inquiry(
           <td align="center">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
               <tr>
-                <td style="background:linear-gradient(135deg,#0f766e,#0ea5a5);padding:28px 32px;">
+                <td style="background:linear-gradient(135deg,#92400e,#f59e0b);padding:28px 32px;">
                   <h1 style="margin:0;font-size:24px;line-height:1.3;color:#ffffff;font-weight:700;">New Patient Inquiry</h1>
-                  <p style="margin:8px 0 0;font-size:14px;color:#ccfbf1;">Studio Medical Center Contact Form Submission</p>
+                  <p style="margin:8px 0 0;font-size:14px;color:#fef3c7;">Studio Medical Center Contact Form Submission</p>
                 </td>
               </tr>
               <tr>
@@ -94,7 +94,7 @@ async def send_inquiry(
                     </tr>
                     <tr>
                       <td style="width:140px;font-size:13px;font-weight:600;color:#6b7280;vertical-align:top;">Inquiry Type</td>
-                      <td style="font-size:15px;color:#111827;background:#ecfeff;border:1px solid #99f6e4;border-radius:10px;padding:10px 12px;font-weight:600;">{safe_inquiry_type}</td>
+                      <td style="font-size:15px;color:#111827;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-weight:600;">{safe_inquiry_type}</td>
                     </tr>
                     <tr>
                       <td style="width:140px;font-size:13px;font-weight:600;color:#6b7280;vertical-align:top;">Message</td>
