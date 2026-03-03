@@ -1,13 +1,16 @@
 import os
 import html
-from typing import List
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import logging
+from typing import Any, Dict, List, Optional, Set
+import httpx
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import EmailStr
 
 app = FastAPI()
+logger = logging.getLogger("sdc-email-service")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +33,102 @@ conf = ConnectionConfig(
 )
 fm = FastMail(conf)
 
+
+def parse_allowed_hostnames(value: Optional[str]) -> Set[str]:
+    if not value:
+        return set()
+    return {hostname.strip().lower() for hostname in value.split(",") if hostname.strip()}
+
+
+def parse_min_score(value: Optional[str], default: float = 0.5) -> float:
+    try:
+        return float(value) if value is not None else default
+    except (TypeError, ValueError):
+        logger.warning(
+            "invalid recaptcha min score value",
+            extra={"event": "config_warning", "reason": "invalid_min_score"},
+        )
+        return default
+
+
+RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
+RECAPTCHA_ALLOWED_HOSTNAMES = parse_allowed_hostnames(
+    os.environ.get("RECAPTCHA_ALLOWED_HOSTNAMES")
+)
+RECAPTCHA_MIN_SCORE = parse_min_score(os.environ.get("RECAPTCHA_MIN_SCORE"), 0.5)
+RECAPTCHA_EXPECTED_ACTION = "online_diagnosis_submit"
+
+
+async def verify_recaptcha_token(
+    token: str,
+    expected_action: str,
+    remote_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    if not RECAPTCHA_SECRET_KEY:
+        return {"ok": False, "reason": "missing_secret"}
+
+    payload = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
+    if remote_ip:
+        payload["remoteip"] = remote_ip
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return {"ok": False, "reason": "verification_request_failed"}
+
+    action = data.get("action")
+    hostname = (data.get("hostname") or "").lower()
+    score = float(data.get("score") or 0.0)
+    success = bool(data.get("success"))
+
+    if not success:
+        return {
+            "ok": False,
+            "reason": "google_reported_failure",
+            "score": score,
+            "action": action,
+            "hostname": hostname,
+        }
+    if action != expected_action:
+        return {
+            "ok": False,
+            "reason": "action_mismatch",
+            "score": score,
+            "action": action,
+            "hostname": hostname,
+        }
+    if score < RECAPTCHA_MIN_SCORE:
+        return {
+            "ok": False,
+            "reason": "low_score",
+            "score": score,
+            "action": action,
+            "hostname": hostname,
+        }
+    if RECAPTCHA_ALLOWED_HOSTNAMES and hostname not in RECAPTCHA_ALLOWED_HOSTNAMES:
+        return {
+            "ok": False,
+            "reason": "hostname_not_allowed",
+            "score": score,
+            "action": action,
+            "hostname": hostname,
+        }
+
+    return {
+        "ok": True,
+        "reason": "passed",
+        "score": score,
+        "action": action,
+        "hostname": hostname,
+    }
+
+
 @app.on_event("startup")
 async def startup_event():
     print("--- STARTING EMAIL CONNECTION TEST ---")
@@ -40,14 +139,50 @@ async def startup_event():
 
 @app.post("/send-inquiry")
 async def send_inquiry(
+    request: Request,
     name: str = Form(...),
     phone: str = Form(...),
     email: EmailStr = Form(...),
     inquiry_type: str = Form(...),
-    message: str = Form(...),
-    files: List[UploadFile] = File(...)
+    message: str = Form(""),
+    recaptcha_token: str = Form(""),
+    recaptcha_action: str = Form(""),
+    files: Optional[List[UploadFile]] = File(None)
 ):
     print(f"Received request from {email}")
+
+    if not recaptcha_token or not recaptcha_action:
+        raise HTTPException(status_code=400, detail="Missing required captcha fields.")
+    if recaptcha_action != RECAPTCHA_EXPECTED_ACTION:
+        logger.info(
+            "captcha rejected",
+            extra={
+                "event": "captcha_rejected",
+                "reason": "action_not_expected",
+                "action": recaptcha_action,
+            },
+        )
+        raise HTTPException(status_code=403, detail="Request rejected.")
+
+    remote_ip = request.client.host if request.client else None
+    verification = await verify_recaptcha_token(
+        token=recaptcha_token,
+        expected_action=RECAPTCHA_EXPECTED_ACTION,
+        remote_ip=remote_ip,
+    )
+    log_payload = {
+        "event": "captcha_result",
+        "ok": verification.get("ok"),
+        "reason": verification.get("reason"),
+        "score": verification.get("score"),
+        "action": verification.get("action"),
+        "hostname": verification.get("hostname"),
+    }
+    if verification.get("ok"):
+        logger.info("captcha verified", extra=log_payload)
+    else:
+        logger.warning("captcha rejected", extra=log_payload)
+        raise HTTPException(status_code=403, detail="Request could not be verified.")
 
     safe_name = html.escape(name)
     safe_phone = html.escape(phone)
@@ -125,7 +260,7 @@ async def send_inquiry(
         recipients=[os.environ.get("MAIL_RECIPIENT")],
         body=message_body,
         subtype=MessageType.html,
-        attachments=files
+        attachments=files or []
     )
 
     try:

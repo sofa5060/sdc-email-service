@@ -3,3 +3,5 @@ uvicorn
 python-multipart
 fastapi-mail
 pydantic-settings
+httpx
+pytest
