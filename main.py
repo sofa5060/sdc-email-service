@@ -1,7 +1,7 @@
 import os
 import html
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
@@ -34,12 +34,6 @@ conf = ConnectionConfig(
 fm = FastMail(conf)
 
 
-def parse_allowed_hostnames(value: Optional[str]) -> Set[str]:
-    if not value:
-        return set()
-    return {hostname.strip().lower() for hostname in value.split(",") if hostname.strip()}
-
-
 def parse_min_score(value: Optional[str], default: float = 0.5) -> float:
     try:
         return float(value) if value is not None else default
@@ -52,9 +46,6 @@ def parse_min_score(value: Optional[str], default: float = 0.5) -> float:
 
 
 RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
-RECAPTCHA_ALLOWED_HOSTNAMES = parse_allowed_hostnames(
-    os.environ.get("RECAPTCHA_ALLOWED_HOSTNAMES")
-)
 RECAPTCHA_MIN_SCORE = parse_min_score(os.environ.get("RECAPTCHA_MIN_SCORE"), 0.5)
 RECAPTCHA_EXPECTED_ACTION = "online_diagnosis_submit"
 
@@ -111,15 +102,6 @@ async def verify_recaptcha_token(
             "action": action,
             "hostname": hostname,
         }
-    if RECAPTCHA_ALLOWED_HOSTNAMES and hostname not in RECAPTCHA_ALLOWED_HOSTNAMES:
-        return {
-            "ok": False,
-            "reason": "hostname_not_allowed",
-            "score": score,
-            "action": action,
-            "hostname": hostname,
-        }
-
     return {
         "ok": True,
         "reason": "passed",
