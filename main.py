@@ -225,7 +225,7 @@ async def send_inquiry(
               <tr>
                 <td style="background:linear-gradient(135deg,#3f2c0b,#b78a2f);padding:28px 32px;border-bottom:1px solid #d4af37;">
                   <h1 style="margin:0;font-size:24px;line-height:1.3;color:#fff4d6;font-weight:700;">New Patient Inquiry</h1>
-                  <p style="margin:8px 0 0;font-size:14px;color:#f5deb1;">Studio Medical Center Contact Form Submission</p>
+                  <p style="margin:8px 0 0;font-size:14px;color:#f5deb1;">Studio Dental Center Contact Form Submission</p>
                 </td>
               </tr>
               <tr>
@@ -261,7 +261,7 @@ async def send_inquiry(
                 <td style="padding:18px 32px 28px;">
                   <div style="padding-top:14px;border-top:1px solid #5f4a1d;">
                     <p style="margin:0;font-size:12px;line-height:1.6;color:#aa8e52;">
-                      This message was generated automatically by the Studio Medical Center inquiry service.
+                      This message was generated automatically by the Studio Dental Center inquiry service.
                     </p>
                   </div>
                 </td>
